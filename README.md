@@ -9,13 +9,13 @@
 
 ## 🧭 兩種模式的差異
 
-| 項目           | DenseOnly                                  | DenseWithReranker                                  |
-| -------------- | ------------------------------------------ | -------------------------------------------------- |
-| 檔案/入口      | `dense_only.py`（或 `USE_RERANKER=False`） | `main.py`（或 `USE_RERANKER=True`）                |
-| 規章 JSON 路徑 | `./data/school_rules.json`                 | `./nchu_rule/school_rules.json`（可改）            |
-| 依賴           | `requests`, `python-dotenv`                | 另需 `transformers`, `torch`（或 `FlagEmbedding`） |
-| 效果           | 輕量、啟動快                               | 檢索更準確（Top-K 重新排序）                       |
-| 適用情境       | 文件量小或快速試跑                         | 文件中常有語義近似段落、需要更準確排名             |
+| 項目           | DenseOnly                                        | DenseWithReranker                                       |
+| -------------- | ------------------------------------------------ | ------------------------------------------------------- |
+| 檔案/入口      | `./DenseOnly/main.py`（或 `USE_RERANKER=False`） | `./DenseWithReranker/main.py`（或 `USE_RERANKER=True`） |
+| 規章 JSON 路徑 | `./data/school_rules.json`                       | `./data/school_rules.json`（可改）                      |
+| 依賴           | `requests`, `python-dotenv`                      | 另需 `transformers`, `torch`（或 `FlagEmbedding`）      |
+| 效果           | 輕量、啟動快                                     | 檢索更準確（Top-K 重新排序）                            |
+| 適用情境       | 文件量小或快速試跑                               | 文件中常有語義近似段落、需要更準確排名                  |
 
 你也可以只保留一個入口檔，用 **環境變數或常數** 切換 `USE_RERANKER=True/False` 與 `DOCUMENTS_JSON_PATH`。
 
@@ -24,14 +24,14 @@
 ```
 .
 ├── data/
-│   └── school_rules.json            # DenseOnly 版使用的規章 JSON
-├── nchu_rule/
-│   └── school_rules.json            # DenseWithReranker 版預設的規章 JSON
+│   └── school_rules.json            # 規章 JSON
 ├── embedding/
 │   └── embeddings_cache.pkl         # 向量快取（自動建立/更新）
-├── dense_only.py                    # DenseOnly 入口（不含 reranker）
-├── main.py                          # DenseWithReranker 入口（含 reranker）
-├── .env                             # 服務端點與模型設定
+├── DenseOnly/
+│   └── main.py                      # DenseOnly 入口（不含 reranker）
+├── DenseWithReranker/
+│   └── main.py                      # DenseWithReranker 入口（含 reranker）
+├── .env                             # 參數設定
 └── README.md
 ```
 
@@ -66,14 +66,13 @@ pip install FlagEmbedding
 在專案根目錄建立 `.env`：
 
 ```env
-# Embedding 服務
-EMBEDDING_API_URL=http://localhost:8000/embed
-EMBEDDING_API_KEY=
-
-# LLM 服務（Ollama 或相容 API）
-GPT_OSS_API_URL=http://localhost:11434/api/chat
-GPT_OSS_MODEL=gemma:2b
-GPT_OSS_API_KEY=
+ANTHROPIC_API_KEY
+GOOGLE_API_KEY
+GPT_OSS_API_KEY
+EMBEDDING_API_URL
+OLLAMA_API_URL
+OLLAMA_MODEL
+RERANKER_MODEL
 ```
 
 ## 🗂️ 規章 JSON 格式
@@ -103,15 +102,15 @@ GPT_OSS_API_KEY=
 預設文件路徑：`./data/school_rules.json`
 
 ```bash
-python dense_only.py
+python ./DenseOnly/main.py
 ```
 
 ### DenseWithReranker
 
-預設文件路徑：`./nchu_rule/school_rules.json`
+預設文件路徑：`./data/school_rules.json`
 
 ```bash
-python main.py
+python DenseWithReranker/main.py
 ```
 
 執行時會：
@@ -123,7 +122,7 @@ python main.py
 
 ## ⚙️ 重要參數
 
-在程式內部（兩個入口檔均有相近設定）：
+在程式內部：
 
 ```python
 # 檢索
@@ -204,13 +203,6 @@ EMBEDDING_CACHE_PATH = "./embedding/embeddings_cache.pkl"
 -   **Top-K 命中率**：檢查最終引用文獻是否涵蓋正確條文
 -   **人工標註準確率**：抽樣問題比對答案與原文是否一致
 -   **Reranker 影響**：同一問題對照 DenseOnly 與 WithReranker 的 Top-1/Top-3 一致性
-
-## 🔮 後續擴充
-
--   接入 FAISS / Milvus 做 ANN 索引
--   支援 **多語查詢** 與跨語對齊
--   前端聊天 UI / API 服務化
--   記錄檢索與回答日誌，用於離線評估與持續改進
 
 ## ✅ 快速檢查清單
 
