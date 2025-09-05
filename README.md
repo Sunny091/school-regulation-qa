@@ -19,7 +19,7 @@
 
 你也可以只保留一個入口檔，用 **環境變數或常數** 切換 `USE_RERANKER=True/False` 與 `DOCUMENTS_JSON_PATH`。
 
-## 📂 專案結構建議
+## 📂 專案結構
 
 ```
 .
