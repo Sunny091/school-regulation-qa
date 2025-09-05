@@ -9,13 +9,13 @@
 
 ## 🧭 兩種模式的差異
 
-| 項目           | DenseOnly                                        | DenseWithReranker                                       |
-| -------------- | ------------------------------------------------ | ------------------------------------------------------- |
-| 檔案/入口      | `./DenseOnly/main.py`（或 `USE_RERANKER=False`） | `./DenseWithReranker/main.py`（或 `USE_RERANKER=True`） |
-| 規章 JSON 路徑 | `./data/school_rules.json`                       | `./data/school_rules.json`（可改）                      |
-| 依賴           | `requests`, `python-dotenv`                      | 另需 `transformers`, `torch`（或 `FlagEmbedding`）      |
-| 效果           | 輕量、啟動快                                     | 檢索更準確（Top-K 重新排序）                            |
-| 適用情境       | 文件量小或快速試跑                               | 文件中常有語義近似段落、需要更準確排名                  |
+| 項目           | DenseOnly                                                | DenseWithReranker                                                 |
+| -------------- | -------------------------------------------------------- | ----------------------------------------------------------------- |
+| 檔案/入口      | `./DenseOnly/XXX.py`（XXX='gptoss or claude or gemini'） | `./DenseWithReranker/main.py`（XXX='gptoss or claude or gemini'） |
+| 規章 JSON 路徑 | `./data/school_rules.json`                               | `./data/school_rules.json`                                        |
+| 依賴           | `requests`, `python-dotenv`                              | 另需 `transformers`, `torch`（或 `FlagEmbedding`）                |
+| 效果           | 輕量、啟動快                                             | 檢索更準確（Top-K 重新排序）                                      |
+| 適用情境       | 文件量小或快速試跑                                       | 文件中常有語義近似段落、需要更準確排名                            |
 
 你也可以只保留一個入口檔，用 **環境變數或常數** 切換 `USE_RERANKER=True/False` 與 `DOCUMENTS_JSON_PATH`。
 
@@ -106,7 +106,7 @@ RERANKER_MODEL
 預設文件路徑：`./data/school_rules.json`
 
 ```bash
-python ./DenseOnly/main.py
+python ./DenseOnly/XXX.py
 ```
 
 ### DenseWithReranker
@@ -114,7 +114,7 @@ python ./DenseOnly/main.py
 預設文件路徑：`./data/school_rules.json`
 
 ```bash
-python DenseWithReranker/main.py
+python DenseWithReranker/XXX.py
 ```
 
 執行時會：
