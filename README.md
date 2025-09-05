@@ -28,9 +28,13 @@
 ├── embedding/
 │   └── embeddings_cache.pkl         # 向量快取（自動建立/更新）
 ├── DenseOnly/
-│   └── main.py                      # DenseOnly 入口（不含 reranker）
+│   ├── gptoss.py                    # 使用 gpt-oss 當 generator（不含 reranker）
+│   ├── claude.py                    # 使用 claude 當 generator （不含 reranker）
+│   └── gemini.py                    # 使用 gemini 當 generator （不含 reranker）
 ├── DenseWithReranker/
-│   └── main.py                      # DenseWithReranker 入口（含 reranker）
+│   ├── gptoss.py                    # 使用 gpt-oss 當 generator（含 reranker）
+│   ├── claude.py                    # 使用 claude 當 generator （含 reranker）
+│   └── gemini.py                    # 使用 gemini 當 generator （含 reranker）
 ├── .env                             # 參數設定
 └── README.md
 ```
