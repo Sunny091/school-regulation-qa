@@ -3,6 +3,8 @@
 """
 School Regulation Q&A System with Dense Retriever
 - 加入 embedding 磁碟快取：./embedding/embeddings_cache.pkl
+- 強化：Reranker 分數正規化（避免 only size-1 arrays 錯誤）
+- 強化：最終一律截到 FINAL_TOP_K（不依賴 reranker 是否成功）
 """
 
 import json
@@ -36,12 +38,12 @@ DOCUMENTS_JSON_PATH = "./data/school_rules.json"
 
 # ========== 檢索配置 ==========
 TOP_K = 50         # 初始檢索的文檔數量 (reranker 前)
-FINAL_TOP_K = 5    # 最終用於 LLM 的文檔數量 (reranker 後)
+FINAL_TOP_K = 5    # ✅ 最終用於 LLM 的文檔數量（一律套用）
 MAX_REF_LENGTH = 8000  # 參考文獻最大字數限制
 
 # ========== Reranker 配置 ==========
 USE_RERANKER = True  # 是否使用 reranker
-RERANKER_MODEL = os.getenv("RERANKER_MODEL")
+RERANKER_MODEL = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
 RERANKER_DEVICE = 'cuda'  # None 為自動選擇，也可以指定 'cuda', 'cpu', 'mps'
 
 # ========== 分塊設定 ==========
@@ -326,21 +328,12 @@ class Reranker(ABC):
 
 
 class BGERerankerV2M3(Reranker):
-    """BAAI/bge-reranker-v2-m3 重排序器實現"""
+    """BAAI/bge-reranker-v2-m3 重排序器實現（含分數正規化）"""
 
     def __init__(self, model_name: str = "BAAI/bge-reranker-v2-m3",
                  device: Optional[str] = None,
                  max_length: int = 512,
                  batch_size: int = 16):
-        """
-        初始化 BGE Reranker
-
-        Args:
-            model_name: 模型名稱
-            device: 設備 ('cuda', 'cpu', 'mps' 或 None 自動選擇)
-            max_length: 最大序列長度
-            batch_size: 批次大小
-        """
         self.model_name = model_name
         self.max_length = max_length
         self.batch_size = batch_size
@@ -384,16 +377,56 @@ class BGERerankerV2M3(Reranker):
         except Exception as e:
             raise RuntimeError(f"載入 reranker 模型失敗: {e}")
 
+    def _as_float_list(self, scores_obj) -> List[float]:
+        """將任意（float/list/ndarray/tensor/巢狀）轉成 List[float]，避免 size-1 array 錯誤"""
+        try:
+            import numpy as np
+        except Exception:
+            np = None
+
+        # torch tensor → cpu
+        if TRANSFORMERS_AVAILABLE and hasattr(scores_obj, "detach"):
+            scores_obj = scores_obj.detach().cpu()
+
+        # 可 tolist 的先轉
+        if hasattr(scores_obj, "tolist"):
+            scores_obj = scores_obj.tolist()
+
+        def _flatten(x):
+            if isinstance(x, (list, tuple)):
+                for y in x:
+                    yield from _flatten(y)
+            else:
+                yield x
+
+        out: List[float] = []
+        for s in _flatten(scores_obj):
+            if np is not None and isinstance(s, (np.generic,)):
+                out.append(float(s.item()))
+            elif np is not None and hasattr(s, "shape"):
+                # numpy.ndarray
+                try:
+                    arr = s.reshape(-1)
+                    if arr.size > 0:
+                        out.append(float(arr[0]))
+                except Exception:
+                    # 非預期型別就跳過
+                    continue
+            else:
+                out.append(float(s))
+        return out
+
     def _compute_scores_flag_embedding(self, query: str, texts: List[str]) -> List[float]:
         """使用 FlagEmbedding 計算分數"""
         pairs = [[query, text] for text in texts]
-        scores = self.reranker.compute_score(pairs, normalize=True)
-        return scores if isinstance(scores, list) else [scores]
+        raw_scores = self.reranker.compute_score(pairs, normalize=True)
+        return self._as_float_list(raw_scores)
 
     def _compute_scores_transformers(self, query: str, texts: List[str]) -> List[float]:
         """使用 Transformers 計算分數"""
-        scores = []
-
+        if not TRANSFORMERS_AVAILABLE:
+            raise ImportError("transformers/torch 不可用")
+        scores: List[float] = []
         # 分批處理
         for i in range(0, len(texts), self.batch_size):
             batch_texts = texts[i:i + self.batch_size]
@@ -413,8 +446,7 @@ class BGERerankerV2M3(Reranker):
                 outputs = self.model(**inputs)
                 batch_scores = torch.nn.functional.sigmoid(
                     outputs.logits.squeeze(-1))
-                scores.extend(batch_scores.cpu().tolist())
-
+            scores.extend(self._as_float_list(batch_scores))
         return scores
 
     def rerank(self, query: str, results: List[RetrievalResult]) -> List[RetrievalResult]:
@@ -441,14 +473,16 @@ class BGERerankerV2M3(Reranker):
                 rerank_scores = self._compute_scores_transformers(query, texts)
 
             # 更新結果的分數和排名
-            reranked_results = []
-            for i, (result, score) in enumerate(zip(results, rerank_scores)):
-                new_result = RetrievalResult(
-                    document=result.document,
-                    score=float(score),  # 使用 rerank 分數
-                    rank=i + 1
+            reranked_results: List[RetrievalResult] = []
+            n = min(len(results), len(rerank_scores))
+            for i in range(n):
+                reranked_results.append(
+                    RetrievalResult(
+                        document=results[i].document,
+                        score=rerank_scores[i],  # 已正規化為 float
+                        rank=i + 1
+                    )
                 )
-                reranked_results.append(new_result)
 
             # 按新分數排序
             reranked_results.sort(key=lambda x: x.score, reverse=True)
@@ -499,8 +533,9 @@ class HuggingFaceReranker(Reranker):
             outputs = self.model(**inputs)
             scores = torch.nn.functional.sigmoid(outputs.logits.squeeze(-1))
 
-        for i, (result, score) in enumerate(zip(results, scores.cpu().tolist())):
-            result.score = score
+        scores = scores.detach().cpu().tolist()
+        for i, (result, score) in enumerate(zip(results, scores)):
+            result.score = float(score)
 
         results.sort(key=lambda x: x.score, reverse=True)
         for i, result in enumerate(results):
@@ -625,12 +660,10 @@ class SchoolQASystem:
             retrieval_results = self.reranker.rerank(
                 question, retrieval_results)
 
-            if len(retrieval_results) > final_top_k:
-                print(f"重排序後取前 {final_top_k} 個文檔")
-                retrieval_results = retrieval_results[:final_top_k]
-        else:
-            if len(retrieval_results) > final_top_k:
-                retrieval_results = retrieval_results[:final_top_k]
+        # ✅ 無論是否使用/成功 rerank，都在此統一截到 final_top_k
+        if len(retrieval_results) > final_top_k:
+            print(f"最終採用前 {final_top_k} 個文檔")
+            retrieval_results = retrieval_results[:final_top_k]
 
         # 步驟 3: 截斷參考文獻長度
         total_length = 0
@@ -840,10 +873,11 @@ def main():
         print('='*60)
 
         try:
+            # ✅ 一律指定 final_top_k=FINAL_TOP_K（不再依 reranker 與否改變）
             result = qa_system.answer_question(
                 QUESTION,
-                top_k=TOP_K,  # 初始檢索數量
-                final_top_k=FINAL_TOP_K if reranker else TOP_K  # 最終使用數量
+                top_k=TOP_K,            # 初始檢索數量（可設大）
+                final_top_k=FINAL_TOP_K  # 最終採用數量（固定）
             )
 
             print(f"回答：{result['answer']}")
@@ -852,9 +886,9 @@ def main():
                 print(
                     f"{i}. {doc_info['title']} (分數: {doc_info['score']:.4f})")
 
-            if reranker and result['total_retrieved'] > len(result['retrieved_documents']):
+            if result['total_retrieved'] > len(result['retrieved_documents']):
                 print(
-                    f"\n註：初始檢索到 {result['total_retrieved']} 個文檔，經 reranker 篩選後使用 {len(result['retrieved_documents'])} 個")
+                    f"\n註：初始檢索到 {result['total_retrieved']} 個文檔，最終使用 {len(result['retrieved_documents'])} 個（若啟用則含 reranker 篩選）")
 
         except Exception as e:
             print(f"處理問題時發生錯誤：{e}")
