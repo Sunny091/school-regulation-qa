@@ -332,7 +332,7 @@ class BGERerankerV2M3(Reranker):
 
     def __init__(self, model_name: str = "BAAI/bge-reranker-v2-m3",
                  device: Optional[str] = None,
-                 max_length: int = 512,
+                 max_length: int = 8192,
                  batch_size: int = 16):
         self.model_name = model_name
         self.max_length = max_length
