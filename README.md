@@ -2,20 +2,20 @@
 
 以 Dense Retriever 為核心的學校規章問答系統。支援兩種執行模式：
 
--   **DenseOnly**：單純用 embedding 做語意檢索
--   **DenseWithReranker**：先 Dense 檢索，再用 BGE Reranker 重新排序提升準確度
+-   **DenseWithRetriever**：單純用 embedding 做語意檢索
+-   **DenseWithRetrieverAndReranker**：先 Dense 檢索，再用 BGE Reranker 重新排序提升準確度
 
 系統會將規章 JSON 檔載入、（可選）分塊、向量化、相似度檢索，並把 Top-K 文本做為參考文獻交給 LLM 產生中文回答。Embedding 結果會快取到 `./embedding/embeddings_cache.pkl` 以加速重複執行。
 
 ## 🧭 兩種模式的差異
 
-| 項目           | DenseOnly                                                | DenseWithReranker                                                 |
-| -------------- | -------------------------------------------------------- | ----------------------------------------------------------------- |
-| 檔案/入口      | `./DenseOnly/XXX.py`（XXX='gptoss or claude or gemini'） | `./DenseWithReranker/main.py`（XXX='gptoss or claude or gemini'） |
-| 規章 JSON 路徑 | `./data/school_rules.json`                               | `./data/school_rules.json`                                        |
-| 依賴           | `requests`, `python-dotenv`                              | 另需 `transformers`, `torch`（或 `FlagEmbedding`）                |
-| 效果           | 輕量、啟動快                                             | 檢索更準確（Top-K 重新排序）                                      |
-| 適用情境       | 文件量小或快速試跑                                       | 文件中常有語義近似段落、需要更準確排名                            |
+| 項目           | DenseWithRetriever                                                | DenseWithRetrieverAndReranker                                                 |
+| -------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 檔案/入口      | `./DenseWithRetriever/XXX.py`（XXX='gptoss or claude or gemini'） | `./DenseWithRetrieverAndReranker/main.py`（XXX='gptoss or claude or gemini'） |
+| 規章 JSON 路徑 | `./data/school_rules.json`                                        | `./data/school_rules.json`                                                    |
+| 依賴           | `requests`, `python-dotenv`                                       | 另需 `transformers`, `torch`（或 `FlagEmbedding`）                            |
+| 效果           | 輕量、啟動快                                                      | 檢索更準確（Top-K 重新排序）                                                  |
+| 適用情境       | 文件量小或快速試跑                                                | 文件中常有語義近似段落、需要更準確排名                                        |
 
 你也可以只保留一個入口檔，用 **環境變數或常數** 切換 `USE_RERANKER=True/False` 與 `DOCUMENTS_JSON_PATH`。
 
@@ -27,11 +27,11 @@
 │   └── school_rules.json            # 規章 JSON
 ├── embedding/
 │   └── embeddings_cache.pkl         # 向量快取（自動建立/更新）
-├── DenseOnly/
+├── DenseWithRetriever/
 │   ├── gptoss.py                    # 使用 gpt-oss 當 generator（不含 reranker）
 │   ├── claude.py                    # 使用 claude 當 generator （不含 reranker）
 │   └── gemini.py                    # 使用 gemini 當 generator （不含 reranker）
-├── DenseWithReranker/
+├── DenseWithRetrieverAndReranker/
 │   ├── gptoss.py                    # 使用 gpt-oss 當 generator（含 reranker）
 │   ├── claude.py                    # 使用 claude 當 generator （含 reranker）
 │   └── gemini.py                    # 使用 gemini 當 generator （含 reranker）
@@ -49,7 +49,7 @@
 pip install requests python-dotenv
 ```
 
-**DenseWithReranker 另外需要其一**：
+**DenseWithRetrieverAndReranker 另外需要其一**：
 
 **A. 使用 Transformers 版本**：
 
@@ -101,20 +101,20 @@ RERANKER_MODEL
 
 ## 🚀 執行方式
 
-### DenseOnly
+### DenseWithRetriever
 
 預設文件路徑：`./data/school_rules.json`
 
 ```bash
-python ./DenseOnly/XXX.py
+python ./DenseWithRetriever/XXX.py
 ```
 
-### DenseWithReranker
+### DenseWithRetrieverAndReranker
 
 預設文件路徑：`./data/school_rules.json`
 
 ```bash
-python DenseWithReranker/XXX.py
+python DenseWithRetrieverAndReranker/XXX.py
 ```
 
 執行時會：
@@ -213,6 +213,6 @@ EMBEDDING_CACHE_PATH = "./embedding/embeddings_cache.pkl"
 -   [ ] `.env` 設好 Embedding 與 LLM 端點
 -   [ ] `school_rules.json` 放在指定路徑
 -   [ ] 首次跑完看到 `embedding/embeddings_cache.pkl`
--   [ ] DenseOnly 能跑通
--   [ ] DenseWithReranker 能跑通（必要套件已裝）
+-   [ ] DenseWithRetriever 能跑通
+-   [ ] DenseWithRetrieverAndReranker 能跑通（必要套件已裝）
 -   [ ] 答案能自然引用條號，文獻不足時會明確說「未明確說明」
